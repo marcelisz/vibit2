@@ -47,6 +47,7 @@ class Configure
         void SetHeaderTemplate(std::shared_ptr<TTXLine> line);
         bool GetRowAdaptive(){return _rowAdaptive;}
         void SetRowAdaptive(bool flag){_rowAdaptive = flag;}
+        bool GetMagazineSerial(){return _magazineSerial;}
         std::string GetServiceStatusString(){return _serviceStatusString;}
         void SetServiceStatusString(std::string status){status.resize(20,' '); _serviceStatusString = status;}
         bool GetMultiplexedSignalFlag(){return _multiplexedSignalFlag;}
@@ -84,6 +85,7 @@ class Configure
         bool _rowAdaptive;
         uint16_t _linesPerField;
         uint16_t _datacastLines;
+        bool _magazineSerial;
         
         // settings for generation of packet 8/30
         bool _multiplexedSignalFlag; // false indicates teletext is multiplexed with video, true means full frame teletext.
