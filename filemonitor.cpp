@@ -345,6 +345,9 @@ int FileMonitor::readDirectory(std::string path, bool firstrun)
                             if (page->GetLock()) // try to lock page
                             {
                                 int curnum = page->GetPageNumber();
+                                uint16_t subcode = 0;
+                                if (std::shared_ptr<Subpage> s = page->GetSubpage())
+                                    subcode = s->GetSubCode(); // try to remember the current subpage number of a carousel
                                 f->LoadFile(name);
                                 if (page->GetPageNumber() != curnum)
                                 {
@@ -380,7 +383,10 @@ int FileMonitor::readDirectory(std::string path, bool firstrun)
                                             _pageList->UpdatePageLists(page, !update); // only transmit immediate update if update flag is set
                                         }
                                         
-                                        page->StepLastSubpage(); // prepare for page to roll to first subpage
+                                        if (update)
+                                            page->StepLastSubpage(); // prepare for page to roll to first subpage
+                                        else
+                                            page->SetSubpage(subcode); // try to restore previous position
                                     }
                                     else
                                     {

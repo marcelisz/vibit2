@@ -363,8 +363,16 @@ std::shared_ptr<Subpage> Page::LocateSubpage(uint16_t SubpageNumber)
 // attempt to set current subpage by number
 void Page::SetSubpage(uint16_t SubpageNumber)
 {
-    if (std::shared_ptr<Subpage> s = LocateSubpage(SubpageNumber))
-        _carouselPage = s;
+    if (std::shared_ptr<Subpage> s = LocateSubpage(SubpageNumber)) // see if subpage exists
+    {
+        StepFirstSubpage();
+        while (_carouselPage != nullptr)
+        {
+            if (s == _carouselPage)
+                break;
+            StepNextSubpageNoLoop();
+        }
+    }
     // no warning on failure
 }
 
