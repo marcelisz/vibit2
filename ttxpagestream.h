@@ -28,6 +28,9 @@ class TTXPageStream : public Page
         
         void SetOneShotFlag(bool val) { _isOneShot = val; }
         bool GetOneShotFlag() { return _isOneShot; }
+        
+        void SetHoldCarouselFlag (bool val) { _holdCarousel = val; }
+        bool GetHoldCarouselFlag() { return _holdCarousel; }
 
         bool GetCarouselFlag() { return _isCarousel; }
         void SetCarouselFlag(bool val) { _isCarousel = val; } // must only be set by Carousel!
@@ -97,6 +100,7 @@ class TTXPageStream : public Page
         bool _deleteFlag; // marks a page for deletion from the service and cannot be undone
         
         bool _isOneShot;
+        bool _holdCarousel;
         
         std::shared_ptr<std::mutex> _mtx;
 };

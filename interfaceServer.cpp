@@ -638,14 +638,10 @@ void InterfaceServer::run()
                                                     }
                                                     else if (cmd == PAGEOPEN)
                                                     {
-                                                        bool OneShot = false;
-                                                        if (n > 5)
-                                                            OneShot = (readBuffer[5] & 1);
-                                                        
                                                         if (n < 7)
                                                         {
                                                             std::stringstream ss;
-                                                            ss << "[InterfaceServer::run] Client " << std::string(inet_ntoa(address.sin_addr)) << ":" << std::to_string(ntohs(address.sin_port)) << ": PAGEOPEN " << std::hex << num << (OneShot?" as OneShot":"");
+                                                            ss << "[InterfaceServer::run] Client " << std::string(inet_ntoa(address.sin_addr)) << ":" << std::to_string(ntohs(address.sin_port)) << ": PAGEOPEN " << std::hex << num;
                                                             _debug->Log(Debug::LogLevels::logDEBUG,ss.str());
                                                             if ((uint8_t)readBuffer[3] > 0 && (uint8_t)readBuffer[3] <= 8 && (uint8_t)readBuffer[4] < 0xff)
                                                             {
@@ -659,7 +655,8 @@ void InterfaceServer::run()
                                                                     if (p->GetLock()) // if this fails we have a real problem!
                                                                     {
                                                                         p->SetPageNumber(num);
-                                                                        p->SetOneShotFlag(OneShot);
+                                                                        p->SetOneShotFlag((n > 5)?(readBuffer[5] & 1):false);
+                                                                        p->SetHoldCarouselFlag((n > 5)?(readBuffer[5] & 2):false);
                                                                         _pageList->AddPage(p, true); // put it in the page lists
                                                                         
                                                                         // at this stage it has no subpages!
@@ -673,17 +670,22 @@ void InterfaceServer::run()
                                                                 else
                                                                 {
                                                                     res[0] = CMDBUSY; // overwritten if successful
-                                                                    if (p->GetOneShotFlag() && p->GetUpdatedFlag())
+                                                                    if (p->GetOneShotFlag() && p->GetUpdatedFlag() && p->GetSubpageCount())
                                                                     {
-                                                                        // previous oneshot hasn't yet sent
+                                                                        // previous oneshot hasn't yet been transmitted
                                                                     }
                                                                     else if (p->GetLock()) // try to lock page
                                                                     {
+                                                                        bool OneShot = (n > 5)?(readBuffer[5] & 1):p->GetOneShotFlag();
+                                                                        
                                                                         if (OneShot || (p->GetOneShotFlag() != OneShot)) // oneshot or oneshot changed
                                                                         {
                                                                             p->SetOneShotFlag(OneShot);
                                                                             _pageList->UpdatePageLists(p);
                                                                         }
+                                                                        
+                                                                        if (n > 5) // apply optional hold flag
+                                                                            p->SetHoldCarouselFlag(readBuffer[5] & 2);
                                                                         
                                                                         client->page = p;
                                                                         res[0] = CMDOK;
@@ -697,7 +699,7 @@ void InterfaceServer::run()
                                                     else if (cmd == PAGESETSUB || cmd == PAGEDELSUB)
                                                     {
                                                         client->subpage = nullptr; // invalidate previous subpage
-                                                        if (n == 5 && client->page)
+                                                        if (client->page && ((cmd == PAGESETSUB && n>=5) || (cmd == PAGEDELSUB && n==5)))
                                                         {
                                                             std::stringstream ss;
                                                             ss << "[InterfaceServer::run] Client " << std::string(inet_ntoa(address.sin_addr)) << ":" << std::to_string(ntohs(address.sin_port)) << ": " << ((cmd==PAGESETSUB)?"PAGESETSUB ":"PAGEDELSUB ") << std::hex << num;
@@ -710,9 +712,10 @@ void InterfaceServer::run()
                                                             else
                                                             {
                                                                 client->subpage = client->page->LocateSubpage(num);
+                                                                bool cueFlag = (n>5)?(readBuffer[5] & 1):false;
                                                                 if (client->subpage == nullptr) // subpage not found
                                                                 {
-                                                                    if (cmd == PAGESETSUB)
+                                                                    if (cmd == PAGESETSUB && !cueFlag)
                                                                     {
                                                                         client->subpage = std::shared_ptr<Subpage>(new Subpage()); // create new subpage
                                                                         client->subpage->SetSubCode(num); // set subcode first
@@ -720,8 +723,10 @@ void InterfaceServer::run()
                                                                         _pageList->UpdatePageLists(client->page);
                                                                         client->subpage->SetSubpageStatus(PAGESTATUS_TRANSMITPAGE);
                                                                         
-                                                                        if (client->page->GetOneShotFlag()) // page is a oneshot
+                                                                        if (client->page->GetOneShotFlag())
+                                                                        {
                                                                             client->page->SetSubpage(num); // put this subpage on air
+                                                                        }
                                                                     }
                                                                     else // PAGEDELSUB
                                                                     {
@@ -732,8 +737,10 @@ void InterfaceServer::run()
                                                                 {
                                                                     if (cmd == PAGESETSUB)
                                                                     {
-                                                                        if (client->page->GetOneShotFlag()) // page is a oneshot
+                                                                        if (client->page->GetOneShotFlag() || cueFlag)
+                                                                        {
                                                                             client->page->SetSubpage(num); // put this subpage on air
+                                                                        }
                                                                     }
                                                                     else // PAGEDELSUB
                                                                     {

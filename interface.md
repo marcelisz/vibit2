@@ -2,7 +2,7 @@
 
 The VBIT2 control interface is a TCP socket server for the insertion of data broadcast packet data, modification of service settings, and dynamic management of pages.
 
-*This document describes version 1.1.0 of the interface API.*
+*This document describes version 1.2.0 of the interface API.*
 
 The server supports up to five simultaneous connections, and uses a variable length binary message format.
 Clients send commands to the server, which will return a response containing an error/status code, and any data requested by the client.
@@ -286,14 +286,21 @@ Possible error/status values:
 
 #### PAGEOPEN - Open a page for updating - version 1.0.0 up:
 This command opens a page for modification by page number. If the page does not exist it will be created.
-The command takes two bytes containing the page number to be opened, followed by an optional flag to designate the page as a *'one shot'* transmission.
+The command takes two bytes containing the page number to be opened, followed by an optional flags byte.
 While a page is open for updating, it is locked and held back from the page transmission cycle. Transmission resumes only once the page has been closed. The page should therefore be updated and closed as quickly as possible.
-Pages with the *OneShot* flag set will be transmitted exactly once and then held until the flag is cleared. Only being transmitted whenever subsequent modifications are made. If a *OneShot* page has multiple sub-pages, the most recently modified sub-page is queued for transmission.
-Once a *OneShot* page has been queued for transmission, attempts to re-open it will return `CMDBUSY` until transmission has occurred.
+
+The following flags are defined:
+| Bit | Description   | API version  |
+|-----|---------------|--------------|
+| b0  | OneShot page  | 1.0.0 onward |
+| b1  | Hold carousel | 1.2.0 onward |
+
+Pages with the *OneShot* flag set will be transmitted exactly once and then held back until the flag is cleared or the page is modified. Once a *OneShot* page has been queued for transmission, attempts to re-open it will return `CMDBUSY` until transmission has occurred.
+Pages with the *Hold* flag set will not cycle subpages in the usual manner until the flag is cleared.
 
     byte:      0        1         2         3         4          5
-    value: [  &06 ][   &03  ][   &01  ][   0-7  ][ &00-&FF ][ &00/&01 ]
-           (length)(PAGESAPI)(PAGEOPEN)(magazine)(   page  )( OneShot )
+    value: [  &06 ][   &03  ][   &01  ][   0-7  ][ &00-&FF ][ &00-&02 ]
+           (length)(PAGESAPI)(PAGEOPEN)(magazine)(   page  )(  flags  )
 
 If the client already has a page open, it is closed implicitly by this command regardless of success/failure.
 
@@ -308,18 +315,21 @@ Possible error/status values:
 This command sets the active sub-page within the currently open page by its sub-code. If the sub-page does not exist it will be created.
 The command takes two bytes containing the sub-code of the sub-page to be set. The sub-code is passed with the most significant byte first (big endian).
 
-    byte:      0        1          2         3       4
-    value: [  &05 ][   &03  ][    &02   ][ b8-15 ][ b0-7 ]
-           (length)(PAGESAPI)(PAGESETSUB)( page sub-code )
+From API version 1.2.0 this command also accepts an optional flag indicating that the sub-page should be cued for transmission. This flag is only valid on existing sub-pages and will prevent creation of a new sub-page when set.
 
-If the current page has the *OneShot* flag set, this sub-page will be queued for transmission.
+    byte:      0        1          2         3       4          5
+    value: [  &06 ][   &03  ][    &02   ][ b8-15 ][ b0-7 ][  &00-&01 ]
+           (length)(PAGESAPI)(PAGESETSUB)( page sub-code )( cue flag )
+
+If the current page has the *OneShot* flag set, this sub-page will always be queued for transmission regardless of cue flag state.
 
 If a page is currently open, the error/status code is followed by two bytes containing the number of sub-pages in the current page, most significant byte first (big endian).
 Possible error/status values:
-| Code   | Reason                                                  |
-|--------|---------------------------------------------------------|
-|`CMDOK` | Sub-page successfully set.                              |
-|`CMDERR`| Invalid sub-code or command length, or no page is open. |
+| Code     | Reason                                                  |
+|----------|---------------------------------------------------------|
+|`CMDOK`   | Sub-page successfully set.                              |
+|`CMDNOENT`| Sub-page not found.                                     |
+|`CMDERR`  | Invalid sub-code or command length, or no page is open. |
 
 #### PAGEDELSUB - Delete sub-page - version 1.0.0 up:
 This command deletes a sub-page within the currently open page by sub-code. It also clears the active subpage.

@@ -365,12 +365,22 @@ void Page::SetSubpage(uint16_t SubpageNumber)
 {
     if (std::shared_ptr<Subpage> s = LocateSubpage(SubpageNumber)) // see if subpage exists
     {
-        StepFirstSubpage();
-        while (_carouselPage != nullptr)
+        if (s->GetSubpageStatus() & PAGESTATUS_TRANSMITPAGE) // check the transmit flag is set
         {
-            if (s == _carouselPage)
-                break;
-            StepNextSubpageNoLoop();
+            StepFirstSubpage();
+            while (_carouselPage != nullptr)
+            {
+                if (s == _carouselPage)
+                {
+                    // rewind iterator to previous subpage so that it is advanced to again on next carousel cycle
+                    if (_iter == _subpages.begin())
+                        StepLastSubpage();
+                    else
+                        --_iter;
+                    break;
+                }
+                StepNextSubpageNoLoop();
+            }
         }
     }
     // no warning on failure

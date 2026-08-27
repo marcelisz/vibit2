@@ -80,7 +80,7 @@ namespace vbit
             PacketDatacast** GetDatachannels() { PacketDatacast **channels=_datachannel; return channels; };
             
         private:
-            const uint8_t APIVERSION[3] = {1,1,0}; // Version number for interface API.
+            const uint8_t APIVERSION[3] = {1,2,0}; // Version number for interface API.
             
             Configure* _configure;
             Debug* _debug;

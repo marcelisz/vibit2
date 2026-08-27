@@ -387,6 +387,7 @@ int FileMonitor::readDirectory(std::string path, bool firstrun)
                                             page->StepLastSubpage(); // prepare for page to roll to first subpage
                                         else
                                             page->SetSubpage(subcode); // try to restore previous position
+                                        page->SetTransitionTime(1); // cycle mode may have changed so force to step
                                     }
                                     else
                                     {
