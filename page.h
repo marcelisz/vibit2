@@ -130,6 +130,7 @@ class Page
 
         bool Special() {return (_pageFunction == GPOP || _pageFunction == POP || _pageFunction == GDRCS || _pageFunction == DRCS || _pageFunction == MOT || _pageFunction == MIP);} // more convenient way to tell if a page is 'special'.
         
+        void FlushSubpages();
         void ClearPage();
         void RenumberSubpages();
         

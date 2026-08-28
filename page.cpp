@@ -56,15 +56,20 @@ void Page::RemoveSubpage(std::shared_ptr<Subpage> s)
     }
 }
 
+void Page::FlushSubpages()
+{
+    _carouselPage=nullptr;
+    _subpages.clear(); // empty subpage list
+    _iter=_subpages.begin(); // reset iterator
+}
+
 void Page::ClearPage()
 {
     _pageNumber = 0; // an invalid page number
     _pageCoding=CODING_7BIT_TEXT;
     _pageFunction=LOP;
-    _carouselPage=nullptr;
     
-    _subpages.clear(); // empty subpage list
-    _iter=_subpages.begin(); // reset iterator
+    FlushSubpages();
 }
 
 void Page::RenumberSubpages()

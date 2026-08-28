@@ -293,10 +293,12 @@ The following flags are defined:
 | Bit | Description   | API version  |
 |-----|---------------|--------------|
 | b0  | OneShot page  | 1.0.0 onward |
-| b1  | Hold carousel | 1.2.0 onward |
+| b1  | HoldCarousel  | 1.2.0 onward |
+| b7  | FlushSubpages | 1.2.0 onward |
 
 Pages with the *OneShot* flag set will be transmitted exactly once and then held back until the flag is cleared or the page is modified. Once a *OneShot* page has been queued for transmission, attempts to re-open it will return `CMDBUSY` until transmission has occurred.
-Pages with the *Hold* flag set will not cycle subpages in the usual manner until the flag is cleared.
+Pages with the *HoldCarousel* flag set will not cycle sub-pages in the usual manner until the flag is cleared.
+If the *FlushSubpages* flag is set, all sub-pages will be purged but other page settings left unmodified.
 
     byte:      0        1         2         3         4          5
     value: [  &06 ][   &03  ][   &01  ][   0-7  ][ &00-&FF ][ &00-&02 ]

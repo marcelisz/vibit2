@@ -678,6 +678,12 @@ void InterfaceServer::run()
                                                                     {
                                                                         bool OneShot = (n > 5)?(readBuffer[5] & 1):p->GetOneShotFlag();
                                                                         
+                                                                        if ((n > 5) && (readBuffer[5] & 0x80)) // flush subpages flag
+                                                                        {
+                                                                            p->FlushSubpages();
+                                                                            _pageList->UpdatePageLists(p);
+                                                                        }
+                                                                        
                                                                         if (OneShot || (p->GetOneShotFlag() != OneShot)) // oneshot or oneshot changed
                                                                         {
                                                                             p->SetOneShotFlag(OneShot);
