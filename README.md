@@ -41,11 +41,11 @@ Windows (MSYS2 UCRT64):
 
     make OS=Windows_NT -j4
 
-Both produce a `vibit2` executable in the source directory. A `Dockerfile` is included for a container build.
+Both produce a `vbit2` executable in the source directory. A `Dockerfile` is included for a container build.
 
 Run it with the directory that holds the page files and the configuration:
 
-    ./vibit2 --dir /path/to/service
+    ./vbit2 --dir /path/to/service
 
 The output can be piped in the command line into a file (in T42 format), an in-vision teletext stream player, or an another tool that outputs generated teletext signal to a compatible device, like [raspi-teletext](https://github.com/ali1234/raspi-teletext) or [hacktv](https://codeberg.org/fsphil/hacktv).
 
