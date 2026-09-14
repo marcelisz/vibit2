@@ -43,6 +43,18 @@ void Page::InsertSubpage(std::shared_ptr<Subpage> s)
         StepFirstSubpage();
 }
 
+unsigned int Page::GetCurrentSubpageNumber()
+{
+    unsigned int number = 0;
+    for (std::list<std::shared_ptr<Subpage>>::iterator s=_subpages.begin();s!=_subpages.end();++s)
+    {
+        number++;
+        if (*s == _carouselPage)
+            return number;
+    }
+    return 0;
+}
+
 void Page::RemoveSubpage(std::shared_ptr<Subpage> s)
 {
     _subpages.remove(s);

@@ -36,6 +36,21 @@ Service::Service(Configure *configure, Debug *debug, PageList *pageList, PacketS
     _linesPerField = _configure->GetLinesPerField();
     _datacastLines = _configure->GetDatacastLines();
     
+    _magazineSerial = (_configure->GetMagazineBroadcastMode() == Configure::MAGAZINE_SERIAL);
+    
+    // Build the order in which magazines are visited in serial mode.
+    // Magazine 1 is index 1 in _magList and magazine 8 is index 0.
+    // Reverse page broadcast visits the magazines from 8 down to 1.
+    for (uint8_t i=0;i<8;i++)
+    {
+        if (_configure->GetReversePageBroadcast())
+            _serialOrder[i] = (uint8_t)((i==0)?0:(8-i));
+        else
+            _serialOrder[i] = (uint8_t)((i+1)%8);
+    }
+    _serialSlot = 0;
+    _serialMagazine = _serialOrder[0];
+    
     _lineCounter = _linesPerField - 1; // roll over immediately
     
     _OutputFormat = _configure->GetOutputFormat();
@@ -52,6 +67,22 @@ Service::~Service()
 void Service::_register(std::list<PacketSource*> *list, PacketSource *src)
 {
     list->push_front(src);
+}
+
+void Service::_advanceSerialMagazine()
+{
+    // Move to the next magazine in the broadcast order, skipping any that have no pages.
+    for (int i=0;i<8;i++)
+    {
+        _serialSlot = (_serialSlot + 1) % 8;
+        uint8_t mag = _serialOrder[_serialSlot];
+        if (_pageList->GetSize(mag) > 0)
+        {
+            _serialMagazine = mag;
+            return;
+        }
+    }
+    // no magazine contains any pages, so there is nowhere to move on to
 }
 
 int Service::run()
@@ -123,38 +154,59 @@ int Service::run()
             }
             
             // now try magazine sources
-            uint8_t sourceCount=0;
-            uint8_t listSize=_magazineSources.size();
-            bool force=false;
-            do
+            if (_magazineSerial)
             {
-                // Loop back to the first source
-                if (magIterator==_magazineSources.end())
+                // Serial mode: transmit one magazine at a time.
+                // A magazine hands over to the next one when it has been round all of its pages.
+                if (_magList[_serialMagazine]->ConsumeCycleComplete() || (_pageList->GetSize(_serialMagazine) == 0))
                 {
-                    magIterator=_magazineSources.begin();
+                    _advanceSerialMagazine();
                 }
-
-                // If we have tried all sources with and without force, then break out with a filler to prevent a deadlock
-                if (sourceCount>listSize*2)
+                
+                if ((_pageList->GetSize(_serialMagazine) > 0) && _magList[_serialMagazine]->IsReady(true))
+                {
+                    p=_magList[_serialMagazine];
+                }
+                else
                 {
                     p=nullptr;
-                    // If we get a lot of this maybe there is a problem?
-                    break;
                 }
-
-                // If we have gone around once and got nothing, then force sources to go if possible.
-                if (sourceCount>listSize)
-                {
-                    force=true;
-                }
-
-                // Get the packet source
-                p=(*magIterator);
-                ++magIterator;
-
-                sourceCount++; // Count how many sources we tried.
             }
-            while (!p->IsReady(force));
+            else
+            {
+                uint8_t sourceCount=0;
+                uint8_t listSize=_magazineSources.size();
+                bool force=false;
+                do
+                {
+                    // Loop back to the first source
+                    if (magIterator==_magazineSources.end())
+                    {
+                        magIterator=_magazineSources.begin();
+                    }
+
+                    // If we have tried all sources with and without force, then break out with a filler to prevent a deadlock
+                    if (sourceCount>listSize*2)
+                    {
+                        p=nullptr;
+                        // If we get a lot of this maybe there is a problem?
+                        break;
+                    }
+
+                    // If we have gone around once and got nothing, then force sources to go if possible.
+                    if (sourceCount>listSize)
+                    {
+                        force=true;
+                    }
+
+                    // Get the packet source
+                    p=(*magIterator);
+                    ++magIterator;
+
+                    sourceCount++; // Count how many sources we tried.
+                }
+                while (!p->IsReady(force));
+            }
             
             // Did we find a packet?
             if (p)

@@ -1,7 +1,42 @@
 #include "packet.h"
 #include "version.h"
+#include "datelang.h"
+#include "configure.h"
+#include <cmath>
 
 using namespace vbit;
+
+namespace
+{
+    /** Write a two digit number into a header substitution.
+     *  @param leadingZero pad the number with a zero rather than a space
+     *  @param padRight put the padding space after the digit rather than before it
+     */
+    void SubstituteNumber(uint8_t* packet, int offset, uint16_t value, bool leadingZero, bool padRight)
+    {
+        if (value > 99)
+            value = 99; // subpage numbers are two digits
+
+        if (value == 0)
+        {
+            // no subpages, for example in a time filling header
+            packet[offset] = 0x20;
+            packet[offset + 1] = 0x20;
+            return;
+        }
+
+        if (value < 10 && !leadingZero)
+        {
+            packet[offset] = (uint8_t)(padRight ? ('0' + value) : ' ');
+            packet[offset + 1] = (uint8_t)(padRight ? ' ' : ('0' + value));
+        }
+        else
+        {
+            packet[offset] = (uint8_t)('0' + (value / 10) % 10);
+            packet[offset + 1] = (uint8_t)('0' + value % 10);
+        }
+    }
+}
 
 Packet::Packet(int mag, int row) : _isHeader(false), _coding(CODING_7BIT_TEXT)
 {
@@ -287,7 +322,9 @@ std::array<uint8_t, PACKETSIZE>* Packet::tx()
 
 /** A header has mag, row=0, page, flags, caption and time
  */
-void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t control, std::string text)
+void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t control, std::string text,
+                    uint16_t subpageNumber, uint16_t subpageCount, const DateLanguage* dateLanguage,
+                    const ClockMessage* clockMessage)
 {
     uint8_t cbit;
     SetMRAG(mag,0);
@@ -321,7 +358,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
     
     cbit=(control & 0x0380) >> 6;                           // Shift the language bits C12,C13,C14.
     
-    // if (control & 0x0040) cbit|=0x01;                    // C11 serial/parallel *** We only work in parallel mode, Serial would mean a different packet ordering.
+    if (control & 0x0040) cbit|=0x01;                       // C11 serial/parallel (C11=1 is serial magazine transmission)
     _packet[12]=Hamming8EncodeTable[cbit];                  // C11 to C14 (C11=0 is parallel, C12,C13,C14 language)
 
     _isHeader=true; // Because it must be a header
@@ -338,7 +375,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
     struct tm * timeinfo;
     timeinfo=localtime(&t);
     
-    char tmpstr[4];
+    char tmpstr[64];
     int off;
     
     // mpp page number - %%#
@@ -358,15 +395,51 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
             _packet[off+2]=_packet[off+2]-'0'-10+'A'; // Particularly poor hex conversion algorithm
     }
     
+    // number of the subpage being transmitted - %t (with leading zero) and %T (without)
+    off = Packet::GetOffsetOfSubstition("%t");
+    if (off > -1)
+        SubstituteNumber(_packet.data(), off, subpageNumber, true, false);
+    off = Packet::GetOffsetOfSubstition("%T");
+    if (off > -1)
+        SubstituteNumber(_packet.data(), off, subpageNumber, false, false);
+    
+    // total number of subpages of the page - %u (with leading zero) and %U (without)
+    // the unpadded total is aligned to the left so that "%T/%U" gives " 1/4 "
+    off = Packet::GetOffsetOfSubstition("%u");
+    if (off > -1)
+        SubstituteNumber(_packet.data(), off, subpageCount, true, true);
+    off = Packet::GetOffsetOfSubstition("%U");
+    if (off > -1)
+        SubstituteNumber(_packet.data(), off, subpageCount, false, true);
+    
     // day name - %%a
     off = Packet::GetOffsetOfSubstition("%%a");
     if (off > -1)
     {
-        int num = strftime(tmpstr,4,"%a",timeinfo);
-        if (num){
-            _packet[off]=tmpstr[0];
-            _packet[off+1]=(num > 1)?tmpstr[1]:' ';
-            _packet[off+2]=(num > 2)?tmpstr[2]:' ';
+        if (dateLanguage != nullptr)
+        {
+            DateLanguageEncode(dateLanguage, dateLanguage->days[timeinfo->tm_wday % 7], _packet.data() + off, 3);
+        }
+        else
+        {
+            // no supported date language, fall back on the system locale
+            int num = strftime(tmpstr, sizeof(tmpstr), "%a", timeinfo);
+            DateLanguageEncode(nullptr, (num > 0) ? tmpstr : "", _packet.data() + off, 3);
+        }
+    }
+
+    // day name, two characters - %c
+    off = Packet::GetOffsetOfSubstition("%c");
+    if (off > -1)
+    {
+        if (dateLanguage != nullptr)
+        {
+            DateLanguageEncode(dateLanguage, dateLanguage->days[timeinfo->tm_wday % 7], _packet.data() + off, 2);
+        }
+        else
+        {
+            int num = strftime(tmpstr, sizeof(tmpstr), "%a", timeinfo);
+            DateLanguageEncode(nullptr, (num > 0) ? tmpstr : "", _packet.data() + off, 2);
         }
     }
 
@@ -374,11 +447,14 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
     off = Packet::GetOffsetOfSubstition("%%b");
     if (off > -1)
     {
-        int num = strftime(tmpstr,4,"%b",timeinfo);
-        if (num){
-            _packet[off]=tmpstr[0];
-            _packet[off+1]=(num > 1)?tmpstr[1]:' ';
-            _packet[off+2]=(num > 2)?tmpstr[2]:' ';
+        if (dateLanguage != nullptr)
+        {
+            DateLanguageEncode(dateLanguage, dateLanguage->months[timeinfo->tm_mon % 12], _packet.data() + off, 3);
+        }
+        else
+        {
+            int num = strftime(tmpstr, sizeof(tmpstr), "%b", timeinfo);
+            DateLanguageEncode(nullptr, (num > 0) ? tmpstr : "", _packet.data() + off, 3);
         }
     }
     
@@ -422,6 +498,11 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         _packet[off+1]=tmpstr[1];
     }
     
+    // The clock. Which part of the header row it occupies is remembered so that
+    // the optional scrolling message can be written over it.
+    int clockStart = -1;
+    int clockEnd = -1;
+    
     // hours - %H
     off = Packet::GetOffsetOfSubstition("%H");
     if (off > -1)
@@ -429,6 +510,8 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         strftime(tmpstr,10,"%H",timeinfo);
         _packet[off]=tmpstr[0];
         _packet[off+1]=tmpstr[1];
+        clockStart = off;
+        clockEnd = off + 1;
     }
     
     // minutes - %M
@@ -438,6 +521,10 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         strftime(tmpstr,10,"%M",timeinfo);
         _packet[off]=tmpstr[0];
         _packet[off+1]=tmpstr[1];
+        if (clockStart < 0 || off < clockStart)
+            clockStart = off;
+        if (off + 1 > clockEnd)
+            clockEnd = off + 1;
     }
     
     // seconds - %S
@@ -447,6 +534,40 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         strftime(tmpstr,10,"%S",timeinfo);
         _packet[off]=tmpstr[0];
         _packet[off+1]=tmpstr[1];
+        if (clockStart < 0 || off < clockStart)
+            clockStart = off;
+        if (off + 1 > clockEnd)
+            clockEnd = off + 1;
+    }
+    
+    // The optional message scrolls through the place the clock normally occupies.
+    // The message appears for clock_message_frequency seconds in every cycle and
+    // is held by the receivers until the page is transmitted again.
+    if (clockMessage != nullptr && clockMessage->speed > 0.0 && clockStart >= 0 &&
+        clockEnd >= clockStart && !clockMessage->text.empty())
+    {
+        const int span = clockEnd - clockStart + 1; // the same width as the clock
+        const int messageLength = (int)clockMessage->text.size();
+        
+        MasterClock::timeStruct clock = mc->GetMasterClock();
+        double now = (double)clock.seconds + (double)clock.fields / 50.0;
+        
+        // The message slides from the right to the left, one character at a time
+        const double messageSeconds = (messageLength + span) / clockMessage->speed;
+        const double cycleSeconds = (double)clockMessage->frequency + messageSeconds;
+        const double phase = fmod(now, cycleSeconds);
+        
+        if (phase >= (double)clockMessage->frequency)
+        {
+            const int step = (int)((phase - (double)clockMessage->frequency) * clockMessage->speed);
+            
+            for (int i = 0; i < span && clockStart + i < PACKETSIZE; i++)
+            {
+                const int index = step + i - span; // the message starts just off the right hand edge
+                _packet[clockStart + i] = (index >= 0 && index < messageLength)
+                                        ? (uint8_t)clockMessage->text[index] : (uint8_t)0x20;
+            }
+        }
     }
     
     Parity(13); // apply parity to the text of the header

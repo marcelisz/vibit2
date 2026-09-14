@@ -17,14 +17,15 @@ int main(int argc, char** argv)
     
     Debug *debug=new Debug();
     
-    /// @todo option of adding a non standard config path
-    Configure *configure=new Configure(debug, argc, argv);
-    
-    // attempt to use system locale for strftime
+    // attempt to use system locale for strftime, and so that the day and month
+    // names in the page header can default to the language of the system
     if (std::setlocale(LC_TIME, "") == nullptr)
     {
         debug->Log(Debug::LogLevels::logERROR,"[main] Unable to set locale");
     }
+    
+    /// @todo option of adding a non standard config path
+    Configure *configure=new Configure(debug, argc, argv);
     
     PageList *pageList=new PageList(configure, debug);
     PacketServer *packetServer=new PacketServer(configure, debug);

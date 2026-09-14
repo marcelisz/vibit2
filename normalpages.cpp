@@ -3,10 +3,11 @@
 
 using namespace vbit;
 
-NormalPages::NormalPages(int mag, PageList *pageList, Debug *debug) :
+NormalPages::NormalPages(int mag, PageList *pageList, Debug *debug, bool reverse) :
     _mag(mag),
     _pageList(pageList),
-    _debug(debug)
+    _debug(debug),
+    _reverse(reverse)
 {
     _iter=_NormalPagesList.begin();
     _page=nullptr;
@@ -23,9 +24,9 @@ void NormalPages::addPage(std::shared_ptr<TTXPageStream> p)
     
     for (std::list<std::shared_ptr<TTXPageStream>>::iterator it=_NormalPagesList.begin();it!=_NormalPagesList.end();++it)
     {
-        // find first page with a higher number
+        // find the first page that this page should be broadcast before
         std::shared_ptr<TTXPageStream> ptr = *it;
-        if (ptr->GetPageNumber() > p->GetPageNumber())
+        if (_reverse ? (ptr->GetPageNumber() < p->GetPageNumber()) : (ptr->GetPageNumber() > p->GetPageNumber()))
         {
             _NormalPagesList.insert(it,p);
             return;

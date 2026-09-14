@@ -17,12 +17,23 @@
 
 #include "debug.h"
 #include "ttxline.h"
+#include "datelang.h"
 
 #define CONFIGFILE "vbit.conf" // default config file name
 
 namespace vbit
 
 {
+/** An optional text message which scrolls through the place of the clock in the
+ *  page header every so often.
+ */
+struct ClockMessage
+{
+    std::string text;         //!< the message in teletext characters, empty when disabled
+    double speed;             //!< scrolling speed in characters per second
+    unsigned int frequency;   //!< seconds of clock before the message appears again
+};
+
 class Configure
 {
     public:
@@ -33,6 +44,16 @@ class Configure
             Raw,
             TS,
             TSNPTS
+        };
+        
+        /** How the magazines are scheduled for transmission.
+         *  Parallel divides the VBI lines between all the magazines.
+         *  Serial transmits one complete magazine at a time.
+         */
+        enum MagazineBroadcastMode
+        {
+            MAGAZINE_PARALLEL,
+            MAGAZINE_SERIAL
         };
         
         //Configure();
@@ -47,9 +68,18 @@ class Configure
         void SetHeaderTemplate(std::shared_ptr<TTXLine> line);
         bool GetRowAdaptive(){return _rowAdaptive;}
         void SetRowAdaptive(bool flag){_rowAdaptive = flag;}
-        bool GetMagazineSerial(){return _magazineSerial;}
+        MagazineBroadcastMode GetMagazineBroadcastMode(){return _magazineBroadcastMode;}
+        bool GetReversePageBroadcast(){return _reversePageBroadcast;}
+        const DateLanguage* GetDateLanguage(){return _dateLanguage;}
+        bool GetDateRegionExplicit(){return _dateRegionExplicit;}
+        const ClockMessage* GetClockMessage(){return _clockMessage.text.empty() ? nullptr : &_clockMessage;}
         std::string GetServiceStatusString(){return _serviceStatusString;}
         void SetServiceStatusString(std::string status){status.resize(20,' '); _serviceStatusString = status;}
+        /** Set the 20 character status display from a teletext line.
+         *  Control codes are expanded from the escape sequences in the same way
+         *  as the header template.
+         */
+        void SetServiceStatusString(std::shared_ptr<TTXLine> line);
         bool GetMultiplexedSignalFlag(){return _multiplexedSignalFlag;}
         uint16_t GetNetworkIdentificationCode(){return _NetworkIdentificationCode;}
         std::array<uint8_t, 4> GetReservedBytes(){return _reservedBytes;}
@@ -85,7 +115,17 @@ class Configure
         bool _rowAdaptive;
         uint16_t _linesPerField;
         uint16_t _datacastLines;
-        bool _magazineSerial;
+        MagazineBroadcastMode _magazineBroadcastMode;
+        bool _reversePageBroadcast;
+        
+        // language used for the day and month names in the page header
+        std::string _dateRegion;
+        const DateLanguage* _dateLanguage;
+        bool _dateRegionExplicit; // true when date_region was set in the config file
+        
+        // optional message which scrolls through the clock in the page header
+        ClockMessage _clockMessage;     // as used for transmission
+        std::string _clockMessageText;  // as read from the config file, in UTF-8
         
         // settings for generation of packet 8/30
         bool _multiplexedSignalFlag; // false indicates teletext is multiplexed with video, true means full frame teletext.

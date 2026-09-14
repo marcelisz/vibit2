@@ -16,8 +16,10 @@ namespace vbit
 class NormalPages
 {
     public:
-        /** Default constructor */
-        NormalPages(int mag, PageList *pageList, Debug *debug);
+        /** Default constructor
+         *  @param reverse When true, pages are broadcast in descending page number order
+         */
+        NormalPages(int mag, PageList *pageList, Debug *debug, bool reverse=false);
         /** Default destructor */
         virtual ~NormalPages();
 
@@ -31,6 +33,7 @@ class NormalPages
         int _mag;
         PageList* _pageList;
         Debug* _debug;
+        bool _reverse; // broadcast pages in descending page number order
         std::list<std::shared_ptr<TTXPageStream>> _NormalPagesList;
         std::list<std::shared_ptr<TTXPageStream>>::iterator _iter;
         std::shared_ptr<TTXPageStream> _page;

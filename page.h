@@ -115,6 +115,8 @@ class Page
         void InsertSubpage(std::shared_ptr<Subpage> s);
         void RemoveSubpage(std::shared_ptr<Subpage> s);
         unsigned int GetSubpageCount() {return _subpages.size();};
+        /** @return the 1 based number of the subpage being transmitted, or 0 if there is none */
+        unsigned int GetCurrentSubpageNumber();
         
         int GetPageNumber() const {return _pageNumber;};
         void SetPageNumber(int page);

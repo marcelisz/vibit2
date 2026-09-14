@@ -38,6 +38,12 @@ namespace vbit
 
             bool IsReady(bool force=false);
 
+            /** Was a complete magazine cycle finished by the last GetPacket() call?
+             *  Reading the flag clears it. Used by Service to advance to the next
+             *  magazine when serial broadcast mode is selected.
+             */
+            bool ConsumeCycleComplete(){bool t=_cycleComplete; _cycleComplete=false; return t;}
+
             void SetPacket29(std::shared_ptr<TTXLine> line);
             std::shared_ptr<TTXLine> GetPacket29() { return _packet29; }
             void DeletePacket29(int designationCode=-1);
@@ -58,6 +64,7 @@ namespace vbit
             PageList* _pageList;
             Configure* _configure;
             Debug* _debug;
+            bool _serialMode; //!< true when magazines are transmitted one at a time
             std::shared_ptr<TTXPageStream> _page; //!< The current page being output
             std::shared_ptr<Subpage> _subpage; // pointer to the actual subpage
             int _magNumber; //!< The number of this magazine. (where 0 is mag 8)
@@ -87,9 +94,17 @@ namespace vbit
             bool _specialPagesFlipFlop; // toggle to alternate between special pages and normal pages
             bool _waitingForField;
             bool _waitingForSecond;
+            bool _cycleComplete; //!< set when the end of a magazine cycle has been reached
             
             MasterClock::timeStruct _lastCycleTimestamp;
             int _cycleDuration; // magazine cycle time in fields
+            
+            /** @return true when date_region should select the character set for this magazine */
+            bool _dateCharSetForced()
+            {
+                const DateLanguage* language = _configure->GetDateLanguage();
+                return (language != nullptr) && _configure->GetDateRegionExplicit() && (language->region != 0);
+            }
     };
 }
 

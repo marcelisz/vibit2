@@ -9,6 +9,7 @@ PacketMag::PacketMag(uint8_t mag, PageList *pageList, Configure *configure, Debu
     _pageList(pageList),
     _configure(configure),
     _debug(debug),
+    _serialMode(configure->GetMagazineBroadcastMode() == Configure::MAGAZINE_SERIAL),
     _page(nullptr),
     _subpage(nullptr),
     _magNumber(mag),
@@ -24,6 +25,7 @@ PacketMag::PacketMag(uint8_t mag, PageList *pageList, Configure *configure, Debu
     _specialPagesFlipFlop(false),
     _waitingForField(false),
     _waitingForSecond(false),
+    _cycleComplete(false),
     _cycleDuration(-1)
 {
     //ctor
@@ -31,7 +33,7 @@ PacketMag::PacketMag(uint8_t mag, PageList *pageList, Configure *configure, Debu
     
     _carousel=new Carousel(_magNumber, _pageList, _debug);
     _specialPages=new SpecialPages(_magNumber, _pageList, _debug);
-    _normalPages=new NormalPages(_magNumber, _pageList, _debug);
+    _normalPages=new NormalPages(_magNumber, _pageList, _debug, _configure->GetReversePageBroadcast());
     _updatedPages=new UpdatedPages(_magNumber, _pageList, _debug);
 }
 
@@ -147,6 +149,7 @@ loopback: // jump back point to avoid returning null packets when we could send 
                 if (_page == nullptr)
                 {
                     // reached the end of a magazine cycle
+                    _cycleComplete = true; // let Service know that it can move on to the next magazine in serial mode
                     // get master clock singleton
                     MasterClock *mc = mc->Instance();
                     MasterClock::timeStruct t = mc->GetMasterClock();
@@ -168,7 +171,13 @@ loopback: // jump back point to avoid returning null packets when we could send 
                     _lastCycleTimestamp = t; // update timestamp
                     
                     // couldn't get a page to send so sent a time filling header
-                    p->Header(_magNumber,0xFF,0x0000,0x8010,_hasCustomHeader?_customHeaderTemplate:_configure->GetHeaderTemplate());
+                    uint16_t fillerControl = 0x8010;
+                    if (_serialMode)
+                        fillerControl |= PAGESTATUS_C11_SERIALMAG; // flag serial magazine transmission
+                    if (_configure->GetDateRegionExplicit() && (_configure->GetDateLanguage() != nullptr))
+                        fillerControl |= (DateLanguageOptionBits(_configure->GetDateLanguage()) << 7); // C12, C13 and C14
+                    p->Header(_magNumber,0xFF,0x0000,fillerControl,_hasCustomHeader?_customHeaderTemplate:_configure->GetHeaderTemplate(),
+                              0, 0, _configure->GetDateLanguage(), _configure->GetClockMessage());
                     return p;
                 }
                 
@@ -236,6 +245,21 @@ loopback: // jump back point to avoid returning null packets when we could send 
                 }
             }
             
+            // C11 describes how the magazine is being broadcast, so it is always
+            // derived from the configured mode rather than from the page file.
+            _status &= ~PAGESTATUS_C11_SERIALMAG;
+            if (_serialMode)
+                _status |= PAGESTATUS_C11_SERIALMAG; // flag serial magazine transmission
+            
+            // The date language selects the national option used for the day and
+            // month names in the header row.
+            const DateLanguage* dateLanguage = _configure->GetDateLanguage();
+            if (dateLanguage != nullptr && _configure->GetDateRegionExplicit())
+            {
+                _status &= ~0x0380; // C12, C13 and C14
+                _status |= (DateLanguageOptionBits(dateLanguage) << 7);
+            }
+            
             if (!(_status & PAGESTATUS_TRANSMITPAGE))
             {
                 _page->FreeLock(); // Must free the lock or we can never use this page again!
@@ -244,7 +268,8 @@ loopback: // jump back point to avoid returning null packets when we could send 
             
             // clear a flag we use to prevent duplicated X/28/0 packets
             _hasX28Region = false;
-            p->Header(_magNumber,_page->GetPageNumber(),thisSubcode,_status,_hasCustomHeader?_customHeaderTemplate:_configure->GetHeaderTemplate());
+            p->Header(_magNumber,_page->GetPageNumber(),thisSubcode,_status,_hasCustomHeader?_customHeaderTemplate:_configure->GetHeaderTemplate(),
+                      _page->GetCurrentSubpageNumber(), _page->GetSubpageCount(), dateLanguage, _configure->GetClockMessage());
             
             uint16_t tempCRC = p->PacketCRC(0); // calculate the crc of the new header
             
@@ -305,7 +330,7 @@ loopback: // jump back point to avoid returning null packets when we could send 
                 _lastTxt=_lastTxt->GetNextLine();
                 break;
             }
-            else if (!(_hasX28Region) && (_region != _magRegion))
+            else if (!(_hasX28Region) && ((_region != _magRegion) || _dateCharSetForced()))
             {
                 // create X/28/0 packet for pages which have a region set with RE in file
                 // this could almost certainly be done more efficiently but it's quite confusing and this is more readable for when it all goes wrong.
@@ -318,6 +343,8 @@ loopback: // jump back point to avoid returning null packets when we could send 
                 }; // default X/28/0 packet in pre Hamming24EncodeTriplet form (i.e. tti OL format)
                 int NOS = (_status & 0x380) >> 7;
                 int language = NOS | (_region << 3);
+                if (_dateCharSetForced())
+                    language = DateLanguageCharSetDesignation(_configure->GetDateLanguage()); // date_region selects the character set
                 int triplet = 0x3C000 | (language << 7); // construct triplet 1
                 val[1] = (triplet & 0x3F) | 0x40;
                 val[2] = ((triplet & 0xFC0) >> 6) | 0x40;

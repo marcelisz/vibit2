@@ -43,7 +43,14 @@ Configure::Configure(Debug *debug, int argc, char** argv) :
     _linesPerField = 16; // default to 16 lines per field
     _datacastLines = 0; // no dedicated datacast lines
     
-    _magazineSerial = false;
+    _magazineBroadcastMode = MAGAZINE_PARALLEL;
+    _reversePageBroadcast = false;
+    
+    _dateLanguage = nullptr;
+    _dateRegionExplicit = false;
+    
+    _clockMessage.speed = 1.0;       // one character per second
+    _clockMessage.frequency = 30;    // half a minute of clock between messages
 
     _multiplexedSignalFlag = false; // using this would require changing all the line counting and a way to send full field through raspi-teletext - something for the distant future when everything else is done...
     
@@ -337,6 +344,35 @@ Configure::Configure(Debug *debug, int argc, char** argv) :
         _debug->Log(Debug::LogLevels::logERROR,"[Configure] datacast lines cannot be greater than lines per field");
         _datacastLines = _linesPerField; // clamp
     }
+    
+    if (_dateLanguage == nullptr)
+    {
+        // date_region was not set, so use the language of the system locale
+        // for the day and month names when it is one we support
+        _dateLanguage = DateLanguageFromLocale();
+    }
+    if (_dateLanguage != nullptr)
+    {
+        _debug->Log(Debug::LogLevels::logINFO,"[Configure::Configure] Date language is " +
+                    std::string(_dateLanguage->code) + " (" + _dateLanguage->name + ")");
+    }
+    
+    // the clock message is coded in teletext characters using the same national
+    // option as the day and month names
+    if (!_clockMessageText.empty())
+    {
+        _clockMessage.text = DateLanguageToTeletext(_dateLanguage, _clockMessageText);
+        if (_clockMessage.text.empty())
+        {
+            _debug->Log(Debug::LogLevels::logWARN,"[Configure::Configure] clock_message has nothing to display");
+        }
+        else
+        {
+            _debug->Log(Debug::LogLevels::logINFO,"[Configure::Configure] Clock message every " +
+                        std::to_string(_clockMessage.frequency) + " seconds at " +
+                        std::to_string(_clockMessage.speed) + " characters per second");
+        }
+    }
 }
 
 Configure::~Configure()
@@ -350,6 +386,14 @@ void Configure::SetHeaderTemplate(std::shared_ptr<TTXLine> line)
     for (int i=8; i<40; i++)
         str += line->GetCharAt(i) & 0x7f;
     _headerTemplate.assign(str);
+}
+
+void Configure::SetServiceStatusString(std::shared_ptr<TTXLine> line)
+{
+    std::string str = "";
+    for (int i=0; i<20; i++)
+        str += line->GetCharAt(i) & 0x7f;
+    _serviceStatusString.assign(str);
 }
 
 int Configure::LoadConfigFile(std::string filename)
@@ -368,7 +412,12 @@ int Configure::LoadConfigFile(std::string filename)
                                           "lines_per_field",
                                           "datacast_lines",
                                           "magazine_priority",
-                                          "magazine_serial" };
+                                          "magazine_broadcast_mode",
+                                          "reverse_page_broadcast",
+                                          "date_region",
+                                          "clock_message",
+                                          "clock_message_speed",
+                                          "clock_message_frequency" };
 
     if (filein.is_open())
     {
@@ -515,7 +564,10 @@ int Configure::LoadConfigFile(std::string filename)
                             }
                             case 6: // "status_display"
                             {
-                                SetServiceStatusString(value);
+                                // use a TTXLine to expand the control code escape sequences in
+                                // the same way as the header template
+                                std::shared_ptr<TTXLine> status(new TTXLine(value));
+                                SetServiceStatusString(status);
                                 break;
                             }
                             case 7: // "lines_per_field"
@@ -593,17 +645,83 @@ int Configure::LoadConfigFile(std::string filename)
                                     _magazinePriority[i] = tmp[i];
                                 break;
                             }
-                            case 10: // magazine_serial
+                            case 10: // magazine_broadcast_mode
+                            {
+                                if (!value.compare("serial"))
+                                {
+                                    _magazineBroadcastMode = MAGAZINE_SERIAL;
+                                }
+                                else if (!value.compare("parallel"))
+                                {
+                                    _magazineBroadcastMode = MAGAZINE_PARALLEL;
+                                }
+                                else
+                                {
+                                    error = 1;
+                                }
+                                break;
+                            }
+                            case 11: // reverse_page_broadcast
                             {
                                 if (!value.compare("true"))
                                 {
-                                    _magazineSerial = true;
+                                    _reversePageBroadcast = true;
                                 }
                                 else if (!value.compare("false"))
                                 {
-                                    _magazineSerial = false;
+                                    _reversePageBroadcast = false;
                                 }
                                 else
+                                {
+                                    error = 1;
+                                }
+                                break;
+                            }
+                            case 12: // date_region
+                            {
+                                const DateLanguage* language = DateLanguageFind(value);
+                                if (language != nullptr)
+                                {
+                                    _dateRegion = value;
+                                    _dateLanguage = language;
+                                    _dateRegionExplicit = true;
+                                }
+                                else
+                                {
+                                    error = 1;
+                                }
+                                break;
+                            }
+                            case 13: // clock_message
+                            {
+                                _clockMessageText = value;
+                                break;
+                            }
+                            case 14: // clock_message_speed
+                            {
+                                try
+                                {
+                                    _clockMessage.speed = std::stod(value);
+                                    if (!(_clockMessage.speed > 0.0))
+                                        error = 1;
+                                }
+                                catch (...)
+                                {
+                                    error = 1;
+                                }
+                                break;
+                            }
+                            case 15: // clock_message_frequency
+                            {
+                                try
+                                {
+                                    int seconds = std::stoi(value);
+                                    if (seconds < 1)
+                                        error = 1;
+                                    else
+                                        _clockMessage.frequency = (unsigned int)seconds;
+                                }
+                                catch (...)
                                 {
                                     error = 1;
                                 }

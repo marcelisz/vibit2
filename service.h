@@ -64,6 +64,12 @@ namespace vbit
             uint64_t _PTS; // presentation timestamp counter
             bool _PTSFlag; // generate PCR and PTS
             
+            // Member variables for serial magazine broadcast
+            bool _magazineSerial; //!< transmit one magazine at a time instead of dividing the lines between them
+            uint8_t _serialOrder[8]; //!< magazine indices in broadcast order (index 0 is magazine 8)
+            uint8_t _serialSlot; //!< position in _serialOrder of the magazine being transmitted
+            uint8_t _serialMagazine; //!< index into _magList of the magazine being transmitted
+            
             std::list<PacketSource*> _magazineSources; // A list of packet sources for magazine data
             std::list<PacketSource*> _datacastSources; // A list of sources for independent data line packets
 
@@ -72,6 +78,9 @@ namespace vbit
 
             // Member functions
             void _register(std::list<PacketSource*> *list, PacketSource *src); // Register packet sources
+
+            /** Move on to the next magazine that contains pages when in serial broadcast mode */
+            void _advanceSerialMagazine();
 
             /**
              * @brief Check if anything changed, and if so signal the event to the packet sources.
