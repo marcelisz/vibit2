@@ -61,10 +61,10 @@ namespace vbit
              * @param subcode (16 bit hex code as in tti file)
              * @param control C bits
              * @param text header template
-             * @param subpageNumber number of the subpage being transmitted with this header
+             * @param subpageNumber number of the currently transmitted subpage
              * @param subpageCount total number of subpages of the page
              * @param dateLanguage language used for the day and month names, or nullptr
-             * @param clockMessage optional message which scrolls through the clock, or nullptr
+             * @param clockMessage optional scrolling message in place of the clock, or nullptr
              */
             void Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t control, std::string text,
                         uint16_t subpageNumber=0, uint16_t subpageCount=0, const DateLanguage* dateLanguage=nullptr,

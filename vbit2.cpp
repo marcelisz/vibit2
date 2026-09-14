@@ -17,8 +17,7 @@ int main(int argc, char** argv)
     
     Debug *debug=new Debug();
     
-    // attempt to use system locale for strftime, and so that the day and month
-    // names in the page header can default to the language of the system
+    // attempt to use system locale for strftime
     if (std::setlocale(LC_TIME, "") == nullptr)
     {
         debug->Log(Debug::LogLevels::logERROR,"[main] Unable to set locale");

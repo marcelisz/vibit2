@@ -24,7 +24,7 @@ void NormalPages::addPage(std::shared_ptr<TTXPageStream> p)
     
     for (std::list<std::shared_ptr<TTXPageStream>>::iterator it=_NormalPagesList.begin();it!=_NormalPagesList.end();++it)
     {
-        // find the first page that this page should be broadcast before
+        // find first page with a higher or lower (reverse) number
         std::shared_ptr<TTXPageStream> ptr = *it;
         if (_reverse ? (ptr->GetPageNumber() < p->GetPageNumber()) : (ptr->GetPageNumber() > p->GetPageNumber()))
         {

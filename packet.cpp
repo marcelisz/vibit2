@@ -395,7 +395,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
             _packet[off+2]=_packet[off+2]-'0'-10+'A'; // Particularly poor hex conversion algorithm
     }
     
-    // number of the subpage being transmitted - %t (with leading zero) and %T (without)
+    // current subpage number - %t (with leading zero) and %T (without)
     off = Packet::GetOffsetOfSubstition("%t");
     if (off > -1)
         SubstituteNumber(_packet.data(), off, subpageNumber, true, false);
@@ -403,7 +403,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
     if (off > -1)
         SubstituteNumber(_packet.data(), off, subpageNumber, false, false);
     
-    // total number of subpages of the page - %u (with leading zero) and %U (without)
+    // total subpage number - %u (with leading zero) and %U (without)
     // the unpadded total is aligned to the left so that "%T/%U" gives " 1/4 "
     off = Packet::GetOffsetOfSubstition("%u");
     if (off > -1)
@@ -412,7 +412,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
     if (off > -1)
         SubstituteNumber(_packet.data(), off, subpageCount, false, true);
     
-    // day name - %%a
+    // 3 character day name - %%a
     off = Packet::GetOffsetOfSubstition("%%a");
     if (off > -1)
     {
@@ -428,7 +428,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         }
     }
 
-    // day name, two characters - %c
+    // 2 character day name - %c
     off = Packet::GetOffsetOfSubstition("%c");
     if (off > -1)
     {
@@ -458,7 +458,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         }
     }
     
-    // day of month with leading zero - %d
+    // day number with leading zero - %d
     off = Packet::GetOffsetOfSubstition("%d");
     if (off > -1)
     {
@@ -467,7 +467,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         _packet[off+1]=tmpstr[1];
     }
     
-    // day of month with no leading zero - %e
+    // day number without leading zero - %e
     off = Packet::GetOffsetOfSubstition("%e");
     if (off > -1)
     {
@@ -480,7 +480,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         _packet[off+1]=tmpstr[1];
     }
     
-    // month number with leading 0 - %m
+    // month number with leading zero - %m
     off = Packet::GetOffsetOfSubstition("%m");
     if (off > -1)
     {
@@ -498,8 +498,7 @@ void Packet::Header(uint8_t mag, uint8_t page, uint16_t subcode, uint16_t contro
         _packet[off+1]=tmpstr[1];
     }
     
-    // The clock. Which part of the header row it occupies is remembered so that
-    // the optional scrolling message can be written over it.
+    // clock start and end (for clock message drawing)
     int clockStart = -1;
     int clockEnd = -1;
     

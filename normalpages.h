@@ -33,7 +33,7 @@ class NormalPages
         int _mag;
         PageList* _pageList;
         Debug* _debug;
-        bool _reverse; // broadcast pages in descending page number order
+        bool _reverse;
         std::list<std::shared_ptr<TTXPageStream>> _NormalPagesList;
         std::list<std::shared_ptr<TTXPageStream>>::iterator _iter;
         std::shared_ptr<TTXPageStream> _page;
